@@ -12,18 +12,24 @@
 
 ## Dev Environment
 
-1. Develop inside custom-built docker image for this repo
-
+### About docker
 ```bash
-# the following commands have NOT been tested
+# If running below command, and you accidentally ctrl-D exit the program
+# The container will be stopped
+# docker run -it  ...
 
-# builds a docker image called fan_club
-docker build -t fan_club -f docker/Dockerfile.fanclub_pytorch .
+# Instead, run docker detached, so it will continiue running
+# give it a name such as byteps-dev
+docker run -dit --name byteps-dev --net=host --gpus all --shm-size=32768m bytepsimage/worker_pytorch
+# then attach to it
+docker attach byteps-dev
 
-nvidia-docker run -it fan_club bash
+# now docker will always be there even after you accidently exited it
 ```
 
-2. Develop inside pre-built docker image, and then somehow migrate the changes to this repo
+### Vesion Control
+
+Develop inside pre-built docker image, and then somehow migrate the changes to this repo
 
 ```bash
 # use pre-built docker image from byteps as before
