@@ -10,6 +10,10 @@
 
 4. What codes do server / scheduler run anyways?
 
+## Dev Design & Reasoning
+
+* Each client needs to talk all workers. This overhead cannot be avoided because the ML model is sharded throughout all workers, and a response HAS TO be the aggregate for the all workers. The only solution would be to do replciation of weights, which can be a potentially interesting topic
+
 ## Dev Environment
 
 ### About docker
@@ -70,6 +74,24 @@ def metric_average(val, name):
 
 
 ```
+
+`Discussion`:
+
+* Cleanest implementation and reuses most resources and codes
+
+* May use non-consistent weights, although inconsistency is only between workers.
+
+`TODO`
+* Evaluate the inconsistency between workers: How different can they be? How much synchronization is there already
+
+* Can same GPU handle training, e.g. loss.backward(), while an inference request comes in?
+```
+Experiemnts to consider (Consider recording data for Accuracy & Latency):
+1. For each iteration in each epoch, sequentially first execute any outstanding inference requests
+2. Have a different thread, with the same model (maybe periodically updated model), thread always goes ahead and execute the real-time inference request
+3. Have a different machine / processs, with a replicated model (periodically updated), which would always wait and execute real-time inference request
+```
+
 
 ### Plan 2. Use Replicated Best Weights from New Worker Machines
 
