@@ -26,7 +26,7 @@ Example image provided:
 
 Example simple live inference execution for MNIST dataset:
 
-<img src="example_live_inference_execution.png" width="400" height="400" />
+<img src="example_simple_live_inference_execution.png" />
 
 
 
