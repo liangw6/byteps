@@ -115,3 +115,6 @@ venv.bak/
 
 # for development
 scripts/
+
+# data
+data-*/

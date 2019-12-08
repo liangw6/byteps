@@ -181,7 +181,7 @@ def on_new_client(client_socket, addr):
     if type(client_request) is torch.tensor:
         model.eval()
         output = model(client_request)
-        pred = output.data.max(1, keepdim=True)[1]
+        pred = output.data.max(1, keepdim=True)[1].squeeze()
         inference_utils.send_msg(client_socket, pred, use_pickle=True)
     else:
         print("Request message: ", client_request)
@@ -202,10 +202,7 @@ def inference_server():
         client_socket, addr = s.accept()     # Establish connection with client.
         client_thread = threading.Thread(target=on_new_client, args=[client_socket, addr])
         client_thread.start()
-        # thread.start_new_thread(on_new_client,(client_socket,addr))
-        #Note it's (addr,) not (addr) because second parameter is a tuple
-        #Edit: (c,addr)
-        #that's how you pass arguments to functions when creating new threads using thread module.
+
         s.close()
 
 server_thread = threading.Thread(target=inference_server)

@@ -3,6 +3,7 @@ import pickle
 import time             # for recording performance
 import multiprocessing as mp
 from torchvision import datasets, transforms
+import torch
 
 import inference_utils
 
@@ -11,6 +12,7 @@ WORKERS = ['localhost']
 PORT = 50007
 
 BATCH_SIZE = 64
+REQUEST_PER_CLIENT = 100
 # transofrm applied by byteps train_mnist_byteps.py
 DATA_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
@@ -39,7 +41,7 @@ def one_client(client_id):
     accu = []
     latency = [] 
     for data, target in test_loader:
-        if tot_requests is not None and request_cnt == tot_requests:
+        if request_cnt >= REQUEST_PER_CLIENT:
             # only  do so many requests
             brreak
         
@@ -50,24 +52,29 @@ def one_client(client_id):
             # s.send(pickle.dumps(data))
 
         # wait for answer from workers
-        worker_answers = []
-        for s in worker_sockets:
+        worker_answers = torch.zeros([len(worker_sockets), BATCH_SIZE])
+        for index, s in enumerate(worker_sockets):
             # s.recv will block until data is received
-            # WARNING: this may not be fair from time to time
+            # WARNING: this may not be fair when there are a lot of workers
             recv_data = inference_utils.recv_msg(s, use_pickle=True)
             # recv_data = pickle.loads(s.recv(4096))
-            worker_answers.append(recv_data)
+            assert(recv_data.shape == (BATCH_SIZE, ))
+
+            worker_answers[index, :] = recv_data
 
         after_receive = time.time()
+
+        # ASSUME: concensus is the one with most vote from all workers
+        worker_concensus = worker_answers.mode(0, keepdim=True)[0]
+        curr_accu = worker_concensus.eq(target).sum().float() / target.numel()
+
 
         # TODO: compare worker answers with target
         print("worker answers:" worker_answers)
         print("target:", target)
-        print("adding random accuracy for now")
-        accu.append(1)
-
+        accu.append(curr_accu)
         latency.append(after_receive - before_send)
-        tot_requests +=1
+        tot_requests += 1
 
     print("Client", client_id, "cleaning up")
 

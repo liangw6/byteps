@@ -14,6 +14,9 @@ elif [ "$EVAL_TYPE" == "benchmark" ]; then
 elif [ "$EVAL_TYPE" == "microbenchmark" ]; then
     echo "running microbenchmark"
     python $path/microbenchmark-byteps.py $@
+if [ "$EVAL_TYPE" == "mnist_inference" ]; then
+    echo "training mnist... with real-time inference"
+    python $path/mnist_client.py $@
 else
   echo "Error: unsupported $EVAL_TYPE"
   exit 1
