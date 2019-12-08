@@ -19,8 +19,10 @@ import torch.utils.data.distributed
 import byteps.torch as bps
 
 import inference_utils
+import sys
 # parameters for real-time inference
-PORT = 50007
+PORT = 50009
+HOST = 'localhost'
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
@@ -168,8 +170,8 @@ def test():
     test_accuracy /= len(test_sampler)
 
     # BytePS: average metric values across workers.
-    test_loss = metric_average(test_loss, 'avg_loss')
-    test_accuracy = metric_average(test_accuracy, 'avg_accuracy')
+    # test_loss = metric_average(test_loss, 'avg_loss')
+    # test_accuracy = metric_average(test_accuracy, 'avg_accuracy')
 
     # BytePS: print output only on first rank.
     if bps.rank() == 0:
@@ -177,36 +179,57 @@ def test():
             test_loss, 100. * test_accuracy))
 
 def on_new_client(client_socket, addr):
-    client_request = inference_utils.recv_msg(client_socket, use_pickle=True)
-    if type(client_request) is torch.tensor:
-        model.eval()
-        output = model(client_request)
-        pred = output.data.max(1, keepdim=True)[1].squeeze()
-        inference_utils.send_msg(client_socket, pred, use_pickle=True)
-    else:
-        print("Request message: ", client_request)
-        print("INVALID. From client", addr)
+    while True:
+        client_request = inference_utils.recv_msg(client_socket, use_pickle=True)
+        if type(client_request) is torch.Tensor:
+            if args.cuda:
+                client_request = client_request.cuda()
+            model.eval()
+            output = model(client_request)
+            pred = output.data.max(1, keepdim=True)[1].squeeze()
 
-    clientsocket.close()
+            if args.cuda:
+                pred = pred.cpu()
+            inference_utils.send_msg(client_socket, pred, use_pickle=True)
+        else:
+            print("Request message: ", client_request)
+            print("INVALID. From client", addr)
+
+    # these will never be executed
+    client_socket.shutdown(socket.SHUT_RDWR)
+    client_socket.close()
 
 def inference_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((socket.gethostname, PORT))
+    s.bind((HOST, PORT))
     # number of unaccepted connections that system will allow
     # before refusing new connections
     s.listen(10)
 
+    print("starts real-time inference server")
+    sys.stdout.flush()
     while True:
-        # accept can continuously provide new client connections
-        # so keep it coming
-        client_socket, addr = s.accept()     # Establish connection with client.
-        client_thread = threading.Thread(target=on_new_client, args=[client_socket, addr])
-        client_thread.start()
-
-        s.close()
+        try:
+            # accept can continuously provide new client connections
+            # so keep it coming
+            client_socket, addr = s.accept()     # Establish connection with client.
+            print("accepted client from ", addr)
+            sys.stdout.flush()
+            client_thread = threading.Thread(target=on_new_client, args=[client_socket, addr])
+            client_thread.start()
+        except KeyboardInterrupt:
+            print("received manual control to shutdown")
+        finally:
+            s.close()
 
 server_thread = threading.Thread(target=inference_server)
 server_thread.start()
 for epoch in range(1, args.epochs + 1):
     train(epoch)
     test()
+
+# so inference server lives a little
+print("sleeping")
+import time
+time.sleep(1000)
+print("waking up")

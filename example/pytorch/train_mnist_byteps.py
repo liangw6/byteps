@@ -8,6 +8,8 @@ from torchvision import datasets, transforms
 import torch.utils.data.distributed
 import byteps.torch as bps
 
+import sys
+
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
@@ -148,14 +150,23 @@ def test():
         pred = output.data.max(1, keepdim=True)[1]
         test_accuracy += pred.eq(target.data.view_as(pred)).cpu().float().sum()
 
+        print("data type", data.dtype)
+        print("target shape", target.shape)
+        print("output shape", output.shape)
+        print("prediction shape", pred.shape)
+
+        print("taget", target[:10])
+        print("taget", pred.squeeze()[:10])
+        sys.exit(0)
+
     # BytePS: use test_sampler to determine the number of examples in
     # this worker's partition.
     test_loss /= len(test_sampler)
     test_accuracy /= len(test_sampler)
 
     # BytePS: average metric values across workers.
-    test_loss = metric_average(test_loss, 'avg_loss')
-    test_accuracy = metric_average(test_accuracy, 'avg_accuracy')
+    # test_loss = metric_average(test_loss, 'avg_loss')
+    # test_accuracy = metric_average(test_accuracy, 'avg_accuracy')
 
     # BytePS: print output only on first rank.
     if bps.rank() == 0:
