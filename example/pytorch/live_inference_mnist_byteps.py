@@ -58,7 +58,7 @@ train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=args.batch_size, sampler=train_sampler, **kwargs)
 
 test_dataset = \
-    datasets.MNIST('data-%d' % bps.rank(), train=False, transform=transforms.Compose([
+    datasets.MNIST('data-%d' % bps.rank(), train=False, download=True, transform=transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
     ]))
@@ -109,7 +109,7 @@ optimizer = bps.DistributedOptimizer(optimizer,
 
 # BytePS: broadcast parameters.
 bps.broadcast_parameters(model.state_dict(), root_rank=0)
-bps.broadcast_optimizer_state(optimizer, root_rank=0)
+# bps.broadcast_optimizer_state(optimizer, root_rank=0)
 
 def train(epoch):
     model.train()
@@ -173,6 +173,9 @@ best_model = None
 model_update_lock = threading.Lock()
 
 def byteps_model_train():
+    global best_test_accuracy
+    global best_test_loss
+    global best_model
     for epoch in range(1, args.epochs + 1):
         train(epoch)
         test_loss, test_accuracy = test()
@@ -193,18 +196,21 @@ continue_inference = True
 while continue_inference:
     image_file_path = input("Live Inference (Path to Local Image File or q to quit): ")
 
-    if image_file_path == 'q':
-        continue_inference = False
-        continue
+    if os.path.isfile(image_filepath):
 
-    image = cv2.imread(image_file_path, cv2.IMREAD_GRAYSCALE) # Default CV2 image format is BGR
-    # converted_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        if image_file_path == 'q':
+            continue_inference = False
+            continue
 
-    # Potentially need to convert image here to be right shape (or assume correct)
-    model_update_lock.acquire()
+        image = cv2.imread(image_file_path, cv2.IMREAD_GRAYSCALE) # Default CV2 image format is BGR
 
-    output = model(np.array([image]))
-    pred = output.data.max(1, keepdim=True)[1]
+        # Potentially need to convert image here to be right shape (or assume correct)
+        model_update_lock.acquire()
 
-    print("Prediction: ", pred)
-    model_update_lock.release()
+        output = model(np.array([image]))
+        pred = output.data.max(1, keepdim=True)[1]
+
+        print("Prediction: ", pred)
+        model_update_lock.release()
+    else:
+        print("Local file not found: ", image_file_path)
