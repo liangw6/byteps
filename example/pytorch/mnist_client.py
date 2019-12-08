@@ -70,7 +70,7 @@ def one_client(client_id):
 
 
         # TODO: compare worker answers with target
-        print("worker answers:" worker_answers)
+        print("worker answers:", worker_answers)
         print("target:", target)
         accu.append(curr_accu)
         latency.append(after_receive - before_send)
