@@ -195,12 +195,12 @@ continue_inference = True
 
 while continue_inference:
     image_file_path = raw_input("Live Inference (Path to Local Image File or q to quit): ")
+    
+    if image_file_path == 'q':
+        continue_inference = False
+        continue
 
     if os.path.isfile(image_file_path):
-
-        if image_file_path == 'q':
-            continue_inference = False
-            continue
 
         image = cv2.imread(image_file_path, cv2.IMREAD_GRAYSCALE) # Default CV2 image format is BGR
 
