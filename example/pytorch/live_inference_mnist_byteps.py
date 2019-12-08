@@ -123,12 +123,12 @@ def train(epoch):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
+        # if batch_idx % args.log_interval == 0:
             # BytePS: use train_sampler to determine the number of examples in
             # this worker's partition.
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), len(train_sampler),
-                100. * batch_idx / len(train_loader), loss.item()))
+            # print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                # epoch, batch_idx * len(data), len(train_sampler),
+                # 100. * batch_idx / len(train_loader), loss.item()))
 
 
 def metric_average(val, name):
@@ -161,9 +161,9 @@ def test():
     test_accuracy = metric_average(test_accuracy, 'avg_accuracy')
 
     # BytePS: print output only on first rank.
-    if bps.rank() == 0:
-        print('\nTest set: Average loss: {:.4f}, Accuracy: {:.2f}%\n'.format(
-            test_loss, 100. * test_accuracy))
+    # if bps.rank() == 0:
+        # print('\nTest set: Average loss: {:.4f}, Accuracy: {:.2f}%\n'.format(
+            # test_loss, 100. * test_accuracy))
 
     return test_loss, test_accuracy
 
@@ -196,7 +196,8 @@ continue_inference = True
 while continue_inference:
     image_file_path = input("Live Inference (Path to Local Image File or q to quit): ")
 
-    if os.path.isfile(image_file_path):
+    exists = os.path.isfile(image_file_path)
+    if exists:
 
         if image_file_path == 'q':
             continue_inference = False
