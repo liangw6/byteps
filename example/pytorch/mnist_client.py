@@ -4,15 +4,21 @@ import time             # for recording performance
 import multiprocessing as mp
 from torchvision import datasets, transforms
 import torch
+import sys
 
 import inference_utils
 
 DATA_PATH = './MNIST/'
 WORKERS = ['localhost']
-PORT = 50007
+PORT = 50009
 
 BATCH_SIZE = 64
 REQUEST_PER_CLIENT = 100
+
+# toy
+BATCH_SIZE = 8
+REQUEST_PER_CLIENT = 5
+
 # transofrm applied by byteps train_mnist_byteps.py
 DATA_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
@@ -26,7 +32,7 @@ def one_client(client_id):
     for worker_ip in WORKERS:
         #             IPV4                  TCP
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((HOST, PORT))
+        s.connect((worker_ip, PORT))
         worker_sockets.append(s)
 
     # load in data
@@ -43,7 +49,7 @@ def one_client(client_id):
     for data, target in test_loader:
         if request_cnt >= REQUEST_PER_CLIENT:
             # only  do so many requests
-            brreak
+            break
         
         before_send = time.time()
         # send the data to workers
@@ -58,23 +64,32 @@ def one_client(client_id):
             # WARNING: this may not be fair when there are a lot of workers
             recv_data = inference_utils.recv_msg(s, use_pickle=True)
             # recv_data = pickle.loads(s.recv(4096))
+            if recv_data is None:
+                print("received None from worker", index)
+                continue
             assert(recv_data.shape == (BATCH_SIZE, ))
 
             worker_answers[index, :] = recv_data
 
+            # worker_sockets[index].close()
+
         after_receive = time.time()
+        print('collected from worker')
 
         # ASSUME: concensus is the one with most vote from all workers
         worker_concensus = worker_answers.mode(0, keepdim=True)[0]
-        curr_accu = worker_concensus.eq(target).sum().float() / target.numel()
-
+        # print("step 1")
+        # ONLY FOR MNIST DATASET!!!!! converting to int avoids floating point comparison problem
+        curr_accu = worker_concensus.int().eq(target.int()).sum().float() / target.numel()
+        print("accuracy", curr_accu)
 
         # TODO: compare worker answers with target
-        print("worker answers:", worker_answers)
-        print("target:", target)
+        # print("worker answers:", worker_answers)
+        # print("target:", target)
+        sys.stdout.flush()
         accu.append(curr_accu)
         latency.append(after_receive - before_send)
-        tot_requests += 1
+        request_cnt += 1
 
     print("Client", client_id, "cleaning up")
 
@@ -90,8 +105,8 @@ if __name__ == "__main__":
         sys.exit()
     n_clients = int(sys.argv[1])
 
-    with mp.pool as pool:
-        results = pool.map(one_client, range(n_clients))
+    pool = mp.Pool(processes=n_clients) 
+    results = pool.map(one_client, range(n_clients))
 
     print("final results", results)
     
