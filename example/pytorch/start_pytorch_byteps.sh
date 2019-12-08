@@ -4,7 +4,7 @@ path="`dirname $0`"
 
 if [ "$EVAL_TYPE" == "mnist" ]; then
     echo "training mnist..."
-    python $path/train_mnist_byteps.py $@
+    python $path/live_inference_mnist_byteps.py $@
 elif [ "$EVAL_TYPE" == "imagenet" ]; then
     echo "training imagenet..."
     python $path/train_imagenet_resnet50_byteps.py $@
