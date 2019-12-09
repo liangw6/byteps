@@ -207,7 +207,7 @@ while continue_inference:
         # Potentially need to convert image here to be right shape (or assume correct)
         model_update_lock.acquire()
 
-        output = model(np.array([image]))
+        output = best_model(np.array([image]))
         pred = output.data.max(1, keepdim=True)[1]
 
         print("Prediction: ", pred)
