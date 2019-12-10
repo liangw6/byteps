@@ -9,8 +9,6 @@
 from __future__ import print_function
 import argparse
 import os
-import threading
-import socket
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -18,10 +16,13 @@ from torchvision import datasets, transforms
 import torch.utils.data.distributed
 import byteps.torch as bps
 
+import threading
+import socket
+import SocketServer
 import inference_utils
 import sys
 # parameters for real-time inference
-PORT = 50009
+PORT = 50011
 HOST = 'localhost'
 
 # Training settings
@@ -209,21 +210,49 @@ def inference_server():
     print("starts real-time inference server")
     sys.stdout.flush()
     while True:
-        try:
-            # accept can continuously provide new client connections
-            # so keep it coming
-            client_socket, addr = s.accept()     # Establish connection with client.
-            print("accepted client from ", addr)
-            sys.stdout.flush()
-            client_thread = threading.Thread(target=on_new_client, args=[client_socket, addr])
-            client_thread.start()
-        except KeyboardInterrupt:
-            print("received manual control to shutdown")
-        finally:
-            s.close()
+        # accept can continuously provide new client connections
+        # so keep it coming
+        client_socket, addr = s.accept()     # Establish connection with client.
+        print("accepted client from ", addr)
+        sys.stdout.flush()
+        client_thread = threading.Thread(target=on_new_client, args=[client_socket, addr])
+        client_thread.start()
+        s.close()
 
-server_thread = threading.Thread(target=inference_server)
+class InfereceRequestHandler(SocketServer.BaseRequestHandler):
+
+    def handle(self):
+        # accessing shared variables
+        global args
+        global model
+
+        client_request = inference_utils.recv_msg(self.request, use_pickle=True)
+        if type(client_request) is torch.Tensor:
+            if args.cuda:
+                client_request = client_request.cuda()
+            model.eval()
+            output = model(client_request)
+            pred = output.data.max(1, keepdim=True)[1].squeeze()
+
+            if args.cuda:
+                pred = pred.cpu()
+            inference_utils.send_msg(self.request, pred, use_pickle=True)
+
+class ThreadedInferenceServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+    pass
+
+
+server = ThreadedInferenceServer((HOST, PORT), InfereceRequestHandler)
+ip, port = server.server_address
+# Start a thread with the server -- that thread will then start one
+# more thread for each request
+server_thread = threading.Thread(target=server.serve_forever)
+# Exit the server thread when the main thread terminates
+server_thread.daemon = True
 server_thread.start()
+
+# server_thread = threading.Thread(target=inference_server)
+# server_thread.start()
 for epoch in range(1, args.epochs + 1):
     train(epoch)
     test()
