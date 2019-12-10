@@ -67,21 +67,59 @@ starts real-time inference server
 in byteps-client container
 ```bash
 # 1 for just one client
-python example/pytorch/mnist_client.py 1
+python example/pytorch/mnist_client.py mnist_tmp.pkl --nclient 24
 # you will then see the following prints
-collected from worker
-('accuracy', tensor(1.))
+('Client', 4, 'cleaning up')
+('Client', 3, 'cleaning up')
+('Client', 22, 'cleaning up')
+('Client', 20, 'cleaning up')
+('Client', 1, 'cleaning up')
+('Client', 12, 'cleaning up')
+('Client', 13, 'cleaning up')
+('Client', 16, 'cleaning up')
+('Client', 6, 'cleaning up')
+('Client', 10, 'cleaning up')
+('Client', 21, 'cleaning up')
+('Client', 14, 'cleaning up')
+('Client', 23, 'cleaning up')
+('Client', 9, 'cleaning up')
+('Client', 8, 'cleaning up')
+('Client', 7, 'cleaning up')
+('Client', 11, 'cleaning up')
+('Client', 0, 'cleaning up')
+('Client', 17, 'cleaning up')
+('Client', 18, 'cleaning up')
+('Client', 19, 'cleaning up')
+('Client', 2, 'cleaning up')
+('Client', 5, 'cleaning up')
+('Client', 15, 'cleaning up')
+received final result
+# final result will be stored in pickle file mnist_tmp.pkl
 ```
 
-* Curernt Problem: client can send only one request to the server before the server shuts down the communication
+* Curernt Problem: if the client requests 30 or more concurrent connections, it would get connection reset by peer error. Stackoverflow says it means the server crashed, but I am not sure what causes the crash. Maybe it is just my computer, since I am running both server and client on the same machine. TODO: try on AWS machines 
+```
+Traceback (most recent call last):
+  File "example/pytorch/mnist_client.py", line 96, in <module>
+    results = pool.map(one_client, range(args.nclient))
+  File "/usr/lib/python2.7/multiprocessing/pool.py", line 251, in map
+    return self.map_async(func, iterable, chunksize).get()
+  File "/usr/lib/python2.7/multiprocessing/pool.py", line 567, in get
+    raise self._value
+socket.error: [Errno 104] Connection reset by peer
+```
 
-    * Essentially, when client and server are done, how do you close the socket. I know that the client probably will need to close the socket. But if the server close the socket, how do I make sure the server is waiting and accepting the second request? If I don't close it, I need to make the child thread stay forever, which may consume unkonwn resources in the worker machine.
+* Other TODOS:
 
-    * So I just don't understand how to build a python socket server that supports multiple clients.
+    * Analyze the results
 
-    * useful posts that I looked into, may contain the clue that I did not realize yet
-    https://stackoverflow.com/questions/10810249/python-socket-multiple-clients
-    https://stackoverflow.com/questions/15958026/getting-errno-9-bad-file-descriptor-in-python-socket
+        * How much does training get impaired by real-time inference? training time & accuracy w/ vs. wo/ real-time server
+
+        * How much latency / inaccuracy was introduced?
+
+            * test on with vs. without network latency?
+
+    * Try harder networks? e.g. resnet?
 
 
 
