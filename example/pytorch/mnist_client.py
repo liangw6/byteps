@@ -10,10 +10,10 @@ import inference_utils
 
 DATA_PATH = './MNIST/'
 WORKERS = ['localhost']
-PORT = 50009
+PORT = 50011
 
-BATCH_SIZE = 64
-REQUEST_PER_CLIENT = 100
+BATCH_SIZE = 16 #64
+REQUEST_PER_CLIENT = 10 # 100
 
 # toy
 BATCH_SIZE = 8
@@ -25,16 +25,23 @@ DATA_TRANSFORM = transforms.Compose([
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
+def client_send_and_recv(ip, port, message):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((ip, port))
+    try:
+        inference_utils.send_msg(sock, message, use_pickle=True)
+        # sock.sendall(message)
+
+        # time and get response
+        after_send = time.time()
+        # response = sock.recv(1024)
+        response = inference_utils.recv_msg(sock, use_pickle=True)
+        latency = time.time() - after_send
+    finally:
+        sock.close()
+    return response, latency
 
 def one_client(client_id):
-    # 1. connect to all workers
-    worker_sockets = []
-    for worker_ip in WORKERS:
-        #             IPV4                  TCP
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((worker_ip, PORT))
-        worker_sockets.append(s)
-
     # load in data
     test_dataset = \
     datasets.MNIST(DATA_PATH, train=False, transform=DATA_TRANSFORM,
@@ -50,31 +57,18 @@ def one_client(client_id):
         if request_cnt >= REQUEST_PER_CLIENT:
             # only  do so many requests
             break
-        
-        before_send = time.time()
-        # send the data to workers
-        for s in worker_sockets:
-            inference_utils.send_msg(s, data, use_pickle=True)
-            # s.send(pickle.dumps(data))
 
-        # wait for answer from workers
-        worker_answers = torch.zeros([len(worker_sockets), BATCH_SIZE])
-        for index, s in enumerate(worker_sockets):
-            # s.recv will block until data is received
-            # WARNING: this may not be fair when there are a lot of workers
-            recv_data = inference_utils.recv_msg(s, use_pickle=True)
-            # recv_data = pickle.loads(s.recv(4096))
+        worker_latency = torch.zeros(len(WORKERS))
+        worker_answers = torch.zeros([len(WORKERS), BATCH_SIZE])
+        for index, one_worker in enumerate(WORKERS):
+            recv_data, process_latency = client_send_and_recv(one_worker, PORT, data)
             if recv_data is None:
                 print("received None from worker", index)
                 continue
             assert(recv_data.shape == (BATCH_SIZE, ))
 
             worker_answers[index, :] = recv_data
-
-            # worker_sockets[index].close()
-
-        after_receive = time.time()
-        print('collected from worker')
+            worker_latency[index] = process_latency
 
         # ASSUME: concensus is the one with most vote from all workers
         worker_concensus = worker_answers.mode(0, keepdim=True)[0]
@@ -82,20 +76,16 @@ def one_client(client_id):
         # ONLY FOR MNIST DATASET!!!!! converting to int avoids floating point comparison problem
         curr_accu = worker_concensus.int().eq(target.int()).sum().float() / target.numel()
         print("accuracy", curr_accu)
+        curr_latency = worker_latency.sum().float() / worker_latency.numel()
+        print("latency", curr_latency)
 
-        # TODO: compare worker answers with target
-        # print("worker answers:", worker_answers)
-        # print("target:", target)
         sys.stdout.flush()
         accu.append(curr_accu)
-        latency.append(after_receive - before_send)
+        latency.append(curr_latency)
         request_cnt += 1
 
     print("Client", client_id, "cleaning up")
 
-    # clean up
-    for s in worker_sockets:
-        s.close()
     # return
     return accu, latency
 
