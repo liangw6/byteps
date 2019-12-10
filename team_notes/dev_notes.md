@@ -14,6 +14,77 @@
 
 * Each client needs to talk all workers. This overhead cannot be avoided because the ML model is sharded throughout all workers, and a response HAS TO be the aggregate for the all workers. The only solution would be to do replciation of weights, which can be a potentially interesting topic
 
+* Without Replication, each worker serves the funcion of both training and real-time inferencing. This will result in resource competition between both tasks, but on the flip side, it adds real-time inferencing without additional machines, thus useful in certain situations with limited compute resources.
+
+* This is more like a concern or question. I thought byteps separates a model in multiple worker machines. But mnist_train gathers test accuracy through aggregating and averaging test_loss from all workers. So that is why I decided to gather predictions the same way. But if a model is truly separated between different worker machines, this may not get the most accurate prediction. (On the other hand though, how do you gather prediction in this kind of system...)
+
+## Dev Progress Update
+
+* Almost working real-time inference system on mnist example scripts
+
+* Current setup:
+    * example/pytorch/mnist_client.py: a psudo-client script that simulates a remote client sending requests from the web.
+
+        * In this case, client request consists of a batch of images, or precisely pytorch tensors, to be classified to 0-9 numbers
+
+        * a client script supports multi-processing, simulating multiple clients running requests separately. We can also run the same script on many machines, simulating even larger groups of clients
+
+        * a client may also initiate many requests. In current development, a client will use a pytorch loader to load mnist test dataset, and send batches of test images, through TCP socket, to worker machines.
+
+        * a client needs to send the same image to all worker machines. It will then receive response from all worker machines and choose the most common worker predictions as "best" worker answer. 
+
+        * For each request, a client records both accuracy and latency, which can be used for analysis later
+
+    * example/pytorch/mnist_worker.py: a psudo-worker script that simulates a worker with  both training and real-time inference
+
+        * The worker essentially has two threads with a globally shared variable `model`. One thread runs training with gradient descent, i.e. `writing` to the model, while the other runs predictions, i.e. `read only` to the model
+
+        * The training thread is exactly the same as byteps.
+
+        * The prediction thread is basically a server. It waits for clients to connect,spawns a new thread for each newly connected client and continues in waiting.
+
+        * the newly spawned thread simply runs prediction for the model, the same way as test() method in mnist_train does. Then it sends the prediction to the client.
+
+        * Since `model` variable is a global variable, once it gets updated in training thread, the updated value will show up for prediction threads. This is demonstrated by a toy example in inference_utils/experiments.ipynb.
+        
+        * since updating loss for a model may not be atomic, the prediction thread may see intermediate weights that are being updated. We can avoid this easily with a lock or something, but I just want to see if we can get away with it.
+
+* Current Progress: The client can initiate one request to a worker and gets a response back. It is also able to use that reponse to calculate accuracy and latency. To demo this, you will need two containers
+
+In the container for worker, 
+```bash
+# basically run it the same way as before
+# ... omitting all environment variables setup
+python /usr/local/byteps/launcher/launch.py   \
+    /usr/local/byteps/example/pytorch/start_pytorch_byteps.sh --epochs 1
+
+# you will then see the following prints
+BytePS launching worker
+training mnist... with real-time inference
+...
+starts real-time inference server
+```
+in byteps-client container
+```bash
+# 1 for just one client
+python example/pytorch/mnist_client.py 1
+# you will then see the following prints
+collected from worker
+('accuracy', tensor(1.))
+```
+
+* Curernt Problem: client can send only one request to the server before the server shuts down the communication
+
+    * Essentially, when client and server are done, how do you close the socket. I know that the client probably will need to close the socket. But if the server close the socket, how do I make sure the server is waiting and accepting the second request? If I don't close it, I need to make the child thread stay forever, which may consume unkonwn resources in the worker machine.
+
+    * So I just don't understand how to build a python socket server that supports multiple clients.
+
+    * useful posts that I looked into, may contain the clue that I did not realize yet
+    https://stackoverflow.com/questions/10810249/python-socket-multiple-clients
+    https://stackoverflow.com/questions/15958026/getting-errno-9-bad-file-descriptor-in-python-socket
+
+
+
 ## Dev Environment
 
 ### About docker
