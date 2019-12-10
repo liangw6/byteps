@@ -22,7 +22,7 @@ import SocketServer
 import inference_utils
 import sys
 # parameters for real-time inference
-PORT = 50011
+PORT = 50015
 HOST = 'localhost'
 
 # Training settings
@@ -179,46 +179,6 @@ def test():
         print('\nTest set: Average loss: {:.4f}, Accuracy: {:.2f}%\n'.format(
             test_loss, 100. * test_accuracy))
 
-def on_new_client(client_socket, addr):
-    while True:
-        client_request = inference_utils.recv_msg(client_socket, use_pickle=True)
-        if type(client_request) is torch.Tensor:
-            if args.cuda:
-                client_request = client_request.cuda()
-            model.eval()
-            output = model(client_request)
-            pred = output.data.max(1, keepdim=True)[1].squeeze()
-
-            if args.cuda:
-                pred = pred.cpu()
-            inference_utils.send_msg(client_socket, pred, use_pickle=True)
-        else:
-            print("Request message: ", client_request)
-            print("INVALID. From client", addr)
-
-    # these will never be executed
-    client_socket.shutdown(socket.SHUT_RDWR)
-    client_socket.close()
-
-def inference_server():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((HOST, PORT))
-    # number of unaccepted connections that system will allow
-    # before refusing new connections
-    s.listen(10)
-
-    print("starts real-time inference server")
-    sys.stdout.flush()
-    while True:
-        # accept can continuously provide new client connections
-        # so keep it coming
-        client_socket, addr = s.accept()     # Establish connection with client.
-        print("accepted client from ", addr)
-        sys.stdout.flush()
-        client_thread = threading.Thread(target=on_new_client, args=[client_socket, addr])
-        client_thread.start()
-        s.close()
-
 class InfereceRequestHandler(SocketServer.BaseRequestHandler):
 
     def handle(self):
@@ -251,8 +211,6 @@ server_thread = threading.Thread(target=server.serve_forever)
 server_thread.daemon = True
 server_thread.start()
 
-# server_thread = threading.Thread(target=inference_server)
-# server_thread.start()
 for epoch in range(1, args.epochs + 1):
     train(epoch)
     test()
