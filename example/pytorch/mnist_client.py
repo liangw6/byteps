@@ -28,7 +28,7 @@ DATA_TRANSFORM = transforms.Compose([
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-def client_send_and_recv(ip, port, message):
+def client_send_and_recv(ip, port, message, n_try = 5):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((ip, port))
     try:
@@ -40,6 +40,12 @@ def client_send_and_recv(ip, port, message):
         # response = sock.recv(1024)
         response = inference_utils.recv_msg(sock, use_pickle=True)
         latency = time.time() - after_send
+    except socket.error as se:
+        print(se)
+        if n_try <= 0:
+            # no more try
+            raise se
+        return client_send_and_recv(ip, port, message, n_try - 1)
     finally:
         sock.close()
     return response, latency
