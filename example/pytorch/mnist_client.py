@@ -56,40 +56,40 @@ def one_client(client_id):
     request_cnt = 0
     accu = []
     latency = []
-    for data, target in test_loader:
-        if request_cnt >= args.request_per_client:
-            # only  do so many requests
-            break
-        worker_latency = torch.zeros(len(WORKERS))
-        worker_answers = torch.zeros([len(WORKERS), args.batch_size])
-        for index, one_worker in enumerate(WORKERS):
-            recv_data, process_latency = client_send_and_recv(one_worker, PORT, data)
-            if recv_data is None:
-                print("received None from worker", index)
-                continue
-            assert(recv_data.shape == (args.batch_size, ))
+    while True:
+        for data, target in test_loader:
+            if request_cnt >= args.request_per_client:
+                # only  do so many requests
+                print("Client", client_id, "cleaning up")
+                # return
+                return accu, latency
+            worker_latency = torch.zeros(len(WORKERS))
+            worker_answers = torch.zeros([len(WORKERS), args.batch_size])
+            for index, one_worker in enumerate(WORKERS):
+                recv_data, process_latency = client_send_and_recv(one_worker, PORT, data)
+                if recv_data is None:
+                    print("received None from worker", index)
+                    continue
+                assert(recv_data.shape == (args.batch_size, ))
 
-            worker_answers[index, :] = recv_data
-            worker_latency[index] = process_latency
+                worker_answers[index, :] = recv_data
+                worker_latency[index] = process_latency
 
-        # ASSUME: concensus is the one with most vote from all workers
-        worker_concensus = worker_answers.mode(0, keepdim=True)[0]
-        # print("step 1")
-        # ONLY FOR MNIST DATASET!!!!! converting to int avoids floating point comparison problem
-        curr_accu = worker_concensus.int().eq(target.int()).sum().float() / target.numel()
-        # print("accuracy", curr_accu)
-        curr_latency = worker_latency.sum().float() / worker_latency.numel()
-        # print("latency", curr_latency)
+            # ASSUME: concensus is the one with most vote from all workers
+            worker_concensus = worker_answers.mode(0, keepdim=True)[0]
+            # print("step 1")
+            # ONLY FOR MNIST DATASET!!!!! converting to int avoids floating point comparison problem
+            curr_accu = worker_concensus.int().eq(target.int()).sum().float() / target.numel()
+            # print("accuracy", curr_accu)
+            curr_latency = worker_latency.sum().float() / worker_latency.numel()
+            # print("latency", curr_latency)
 
-        sys.stdout.flush()
-        accu.append(curr_accu.item())
-        latency.append(curr_latency.item())
-        request_cnt += 1
-
-    print("Client", client_id, "cleaning up")
-
-    # return
-    return accu, latency
+            sys.stdout.flush()
+            accu.append(curr_accu.item())
+            latency.append(curr_latency.item())
+            request_cnt += 1
+        # should automatically loop through test_loader again and again
+        print("finished one pass through test, request_cnt", request_cnt)
 
 if __name__ == "__main__":
     pool = mp.Pool(processes=args.nclient)
