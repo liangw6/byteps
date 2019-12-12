@@ -8,9 +8,9 @@ import sys
 import argparse
 
 import inference_utils
-DATA_PATH = './MNIST/'
-WORKERS = ['localhost']
-PORT = 50015
+DATA_PATH = './data-0/'
+WORKERS = ['local_host']
+PORT = 50017
 
 parser = argparse.ArgumentParser(description='PyTorch MNIST real-time inference client example')
 parser.add_argument('output_file', metavar='output.pkl', help='pickle file name to save the final result')
@@ -28,10 +28,12 @@ DATA_TRANSFORM = transforms.Compose([
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-def client_send_and_recv(ip, port, message, n_try = 5):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((ip, port))
+def client_send_and_recv(ip, port, message, n_try = 20):
+    # sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # sock.connect((ip, port))
     try:
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.connect((ip, port))
         inference_utils.send_msg(sock, message, use_pickle=True)
         # sock.sendall(message)
 
