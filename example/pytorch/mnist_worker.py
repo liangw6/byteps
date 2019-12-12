@@ -21,8 +21,10 @@ import socket
 import SocketServer
 import inference_utils
 import sys
+import time
+import pickle
 # parameters for real-time inference
-PORT = 50015
+PORT = 50017
 HOST = 'localhost'
 
 # Training settings
@@ -45,6 +47,9 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--fp16-pushpull', action='store_true', default=False,
                     help='use fp16 compression during pushpull')
+# added by Arthur
+parser.add_argument('--train-time-file', type=str, default='train_time.pkl',
+                    help='training time for each epoch train_time.pkl')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -179,6 +184,8 @@ def test():
         print('\nTest set: Average loss: {:.4f}, Accuracy: {:.2f}%\n'.format(
             test_loss, 100. * test_accuracy))
 
+    return test_accuracy
+
 class InfereceRequestHandler(SocketServer.BaseRequestHandler):
 
     def handle(self):
@@ -188,14 +195,15 @@ class InfereceRequestHandler(SocketServer.BaseRequestHandler):
 
         client_request = inference_utils.recv_msg(self.request, use_pickle=True)
         if type(client_request) is torch.Tensor:
-            if args.cuda:
-                client_request = client_request.cuda()
-            model.eval()
-            output = model(client_request)
-            pred = output.data.max(1, keepdim=True)[1].squeeze()
+            # if args.cuda:
+            #     client_request = client_request.cuda()
+            # model.eval()
+            # output = model(client_request)
+            # pred = output.data.max(1, keepdim=True)[1].squeeze()
 
-            if args.cuda:
-                pred = pred.cpu()
+            # if args.cuda:
+            #     pred = pred.cpu()
+            pred = torch.ones(client_request.shape[0],)
             inference_utils.send_msg(self.request, pred, use_pickle=True)
 
 class ThreadedInferenceServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
@@ -211,12 +219,19 @@ server_thread = threading.Thread(target=server.serve_forever)
 server_thread.daemon = True
 server_thread.start()
 
+train_time = []
+train_accu = []
 for epoch in range(1, args.epochs + 1):
+    before_train = time.time()
     train(epoch)
-    test()
+    train_time.append(time.time() - before_train)
+    train_accu.append(test().item())
+
+with open(args.train_time_file, 'w') as train_time_file:
+    pickle.dump((train_time, train_accu), train_time_file, protocol=pickle.HIGHEST_PROTOCOL)
 
 # so inference server lives a little
-print("sleeping")
-import time
-time.sleep(1000)
-print("waking up")
+# print("sleeping")
+# import time
+# time.sleep(1000)
+# print("waking up")
