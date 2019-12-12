@@ -195,15 +195,16 @@ class InfereceRequestHandler(SocketServer.BaseRequestHandler):
 
         client_request = inference_utils.recv_msg(self.request, use_pickle=True)
         if type(client_request) is torch.Tensor:
-            # if args.cuda:
-            #     client_request = client_request.cuda()
-            # model.eval()
-            # output = model(client_request)
-            # pred = output.data.max(1, keepdim=True)[1].squeeze()
+            if args.cuda:
+                client_request = client_request.cuda()
+            model.eval()
+            output = model(client_request)
+            pred = output.data.max(1, keepdim=True)[1].squeeze()
 
-            # if args.cuda:
-            #     pred = pred.cpu()
-            pred = torch.ones(client_request.shape[0],)
+            if args.cuda:
+                pred = pred.cpu()
+            # enable inference-only
+            # pred = torch.ones(client_request.shape[0],)
             inference_utils.send_msg(self.request, pred, use_pickle=True)
 
 class ThreadedInferenceServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
